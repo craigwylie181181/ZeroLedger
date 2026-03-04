@@ -6,42 +6,48 @@ async function loadTerminalData() {
         const response = await fetch(DATABASE_URL);
         const data = await response.json();
 
-        // --- TICKER & LEDGER ---
+        // --- TICKER ---
         const marketRow = data.Market[0];
         document.getElementById('ticker-data').innerText = `LIVE: ${marketRow.Ticker_Symbol} | PRICE: $${marketRow.Spot_Price_AUD} AUD | TREND: ${marketRow.Trend}`;
 
+        // --- ISSUANCE LEDGER (WITH DATE FIX) ---
         const ledgerList = document.getElementById('ledger-list');
         ledgerList.innerHTML = '';
+        
         data.Ledger.forEach(tx => {
+            // This translates the ugly timestamp into a clean date
+            const rawDate = new Date(tx.Date);
+            const cleanDate = rawDate.toLocaleDateString('en-AU', { 
+                day: 'numeric', 
+                month: 'short', 
+                year: 'numeric' 
+            });
+
             const li = document.createElement('li');
-            li.innerText = `${tx.Date} | TX: ${tx.Tx_ID} | ACCUs: ${tx.ACCUs_Issued} | $${tx.Value_AUD}`;
+            li.innerText = `${cleanDate} | TX: ${tx.Tx_ID} | ACCUs: ${tx.ACCUs_Issued} | $${tx.Value_AUD}`;
             ledgerList.appendChild(li);
         });
 
-        // --- 2. RENDER THE MAP ---
-        // Centers the map on Australia and uses a dark-mode forensic theme
+        // --- MAP ENGINE ---
         const map = L.map('map-container').setView([-25.2744, 133.7751], 4);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; OpenStreetMap'
         }).addTo(map);
 
-        // Plots your Geospatial tab coordinates onto the map
         data.Geospatial.forEach(point => {
             L.circleMarker([point.Latitude, point.Longitude], {
-                radius: point.Data_Spike_Height / 10, // Scales the dot size
-                color: '#2D5A27', // Eucalyptus Green
+                radius: point.Data_Spike_Height / 10,
+                color: '#2D5A27', 
                 fillOpacity: 0.7
             }).bindPopup(`Project: ${point.Project_ID}`).addTo(map);
         });
 
-        // --- 3. RENDER THE DONUT CHART ---
-        // Counts how many projects use each methodology
+        // --- DONUT CHART ---
         const methodCounts = {};
         data.Projects.forEach(proj => {
             methodCounts[proj.Methodology] = (methodCounts[proj.Methodology] || 0) + 1;
         });
 
-        // Draws the actual chart using your System tab colors
         const ctx = document.getElementById('methodology-chart').getContext('2d');
         new Chart(ctx, {
             type: 'doughnut',
@@ -49,7 +55,7 @@ async function loadTerminalData() {
                 labels: Object.keys(methodCounts),
                 datasets: [{
                     data: Object.values(methodCounts),
-                    backgroundColor: ['#2D5A27', '#8B4513', '#D2B48C'], // Green, Ochre, Tan
+                    backgroundColor: ['#2D5A27', '#8B4513', '#D2B48C'],
                     borderColor: '#111',
                     borderWidth: 2
                 }]
