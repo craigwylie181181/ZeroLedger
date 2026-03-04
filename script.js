@@ -1,43 +1,67 @@
-// 1. YOUR DATABASE LINK GOES HERE
-// Replace the text inside the quotes with your actual Google Apps Script URL
+// 1. YOUR DATABASE LINK
 const DATABASE_URL = 'https://script.google.com/macros/s/AKfycbzLvv_7N4ZepcPOBBRs_2DZcjVSknC7fKaSPT0bgsKj0qef_zAQwsvjdWKqeQQiD17mjQ/exec';
 
-// 2. THE ENGINE: This function pulls the data and updates the website
 async function loadTerminalData() {
     try {
-        // Fetch the data from Google
         const response = await fetch(DATABASE_URL);
         const data = await response.json();
 
-        // --- UPDATE THE TICKER ---
-        const tickerElement = document.getElementById('ticker-data');
-        const marketRow = data.Market[0]; // Grabs the first row of your Market tab
-        tickerElement.innerText = `LIVE: ${marketRow.Ticker_Symbol} | PRICE: $${marketRow.Spot_Price_AUD} AUD | TREND: ${marketRow.Trend}`;
+        // --- TICKER & LEDGER ---
+        const marketRow = data.Market[0];
+        document.getElementById('ticker-data').innerText = `LIVE: ${marketRow.Ticker_Symbol} | PRICE: $${marketRow.Spot_Price_AUD} AUD | TREND: ${marketRow.Trend}`;
 
-        // --- UPDATE THE ISSUANCE LEDGER ---
         const ledgerList = document.getElementById('ledger-list');
-        ledgerList.innerHTML = ''; // Clears the "Connecting..." text
-
-        // Loop through your Ledger tab and create a list item for each row
-        data.Ledger.forEach(transaction => {
-            const listItem = document.createElement('li');
-            listItem.innerText = `${transaction.Date} | TX: ${transaction.Tx_ID} | ACCUs: ${transaction.ACCUs_Issued} | Value: $${transaction.Value_AUD}`;
-            ledgerList.appendChild(listItem);
+        ledgerList.innerHTML = '';
+        data.Ledger.forEach(tx => {
+            const li = document.createElement('li');
+            li.innerText = `${tx.Date} | TX: ${tx.Tx_ID} | ACCUs: ${tx.ACCUs_Issued} | $${tx.Value_AUD}`;
+            ledgerList.appendChild(li);
         });
 
-        // --- UPDATE PLACEHOLDERS FOR CHARTS & MAPS ---
-        // (We will add the actual map and chart graphics in the next phase)
-        document.getElementById('methodology-chart').innerText = 
-            `Database Connected. Tracking ${data.Projects.length} Active Projects.`;
-            
-        document.getElementById('map-container').innerText = 
-            `Geospatial Engine Ready. Loaded ${data.Geospatial.length} coordinate points.`;
+        // --- 2. RENDER THE MAP ---
+        // Centers the map on Australia and uses a dark-mode forensic theme
+        const map = L.map('map-container').setView([-25.2744, 133.7751], 4);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap'
+        }).addTo(map);
+
+        // Plots your Geospatial tab coordinates onto the map
+        data.Geospatial.forEach(point => {
+            L.circleMarker([point.Latitude, point.Longitude], {
+                radius: point.Data_Spike_Height / 10, // Scales the dot size
+                color: '#2D5A27', // Eucalyptus Green
+                fillOpacity: 0.7
+            }).bindPopup(`Project: ${point.Project_ID}`).addTo(map);
+        });
+
+        // --- 3. RENDER THE DONUT CHART ---
+        // Counts how many projects use each methodology
+        const methodCounts = {};
+        data.Projects.forEach(proj => {
+            methodCounts[proj.Methodology] = (methodCounts[proj.Methodology] || 0) + 1;
+        });
+
+        // Draws the actual chart using your System tab colors
+        const ctx = document.getElementById('methodology-chart').getContext('2d');
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(methodCounts),
+                datasets: [{
+                    data: Object.values(methodCounts),
+                    backgroundColor: ['#2D5A27', '#8B4513', '#D2B48C'], // Green, Ochre, Tan
+                    borderColor: '#111',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                plugins: { legend: { labels: { color: '#e0e0e0' } } }
+            }
+        });
 
     } catch (error) {
-        // If something goes wrong, show an error in the ticker
         document.getElementById('ticker-data').innerText = "SYSTEM ERROR: UNABLE TO CONNECT TO DATABASE.";
     }
 }
 
-// 3. Start the engine when the website loads
 loadTerminalData();
